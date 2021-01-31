@@ -18,16 +18,13 @@ model_xml = 'MPL_Handle.xml'
 
 def main():
 
-    test_env = suite_mujoco.load('gym_hand_sim:MplThumbGraspBall-v0')
-    test_env.reset()
-    test_env.render()
 
     cap = False
     xml_path = os.path.join(model_dir, model_xml)
     model = mujoco_py.load_model_from_path(xml_path)
     env = gym.make('gym_hand_sim:MplThumbGraspBall-v0')
 
-    MAX_EPISODE_STEPS = 100
+    MAX_EPISODE_STEPS = 50
 
     num_iterations = 20000 # @param {type:"integer"}
     initial_collect_steps = 100  # @param {type:"integer"} 
@@ -38,6 +35,7 @@ def main():
     log_interval = 200  # @param {type:"integer"}
     num_eval_episodes = 10  # @param {type:"integer"}
     eval_interval = 1000  # @param {type:"integer"}
+
 
     if cap:
         remote = mjremote()
@@ -52,11 +50,9 @@ def main():
         while True:
             if not cap:
                 env.render()
-                env.sim.data.ctrl[8:11] = 0.5
-                env.sim.data.ctrl[12] = 0.5
                 obs, reward, done, info = env.step(env.action_space.sample())
 
-                if i > MAX_EPISODE_STEPS:
+                if info['episode_done'] or i > MAX_EPISODE_STEPS:
                     break
             else:
                 # mocap
@@ -66,7 +62,7 @@ def main():
                 remote.setmocap(pos, quat)
 
                 # actuation
-                env.sim.data.ctrl[5] = 0.37
+                env.sim.data.ctrl[5] = 0.45
                 env.sim.data.ctrl[8:11] = grip
                 env.sim.data.ctrl[12] = grip
 

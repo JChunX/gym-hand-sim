@@ -39,7 +39,9 @@ class RobotEnv(gym.GoalEnv):
 
         self.goal = self._sample_goal()
         obs = self._get_obs()
-        self.action_space = spaces.Box(-1., 1., shape=(n_actions,), dtype='float32')
+        #self.action_space = spaces.Box(-1., 1., shape=(n_actions,), dtype='float32')
+        # Use discrete action space instead
+        self.action_space = spaces.MultiDiscrete(list(np.zeros(n_actions) + 11))
         self.observation_space = spaces.Dict(dict(
             desired_goal=spaces.Box(-np.inf, np.inf, shape=obs['achieved_goal'].shape, dtype='float32'),
             achieved_goal=spaces.Box(-np.inf, np.inf, shape=obs['achieved_goal'].shape, dtype='float32'),
@@ -58,7 +60,7 @@ class RobotEnv(gym.GoalEnv):
         return [seed]
 
     def step(self, action):
-        action = np.clip(action, self.action_space.low, self.action_space.high)
+        action = np.clip(action, 0, 11)
         self._set_action(action)
         self.sim.step()
         self._step_callback()
@@ -66,6 +68,7 @@ class RobotEnv(gym.GoalEnv):
 
         info = {
             'is_success': self._is_success(obs['achieved_goal'], self.goal),
+            'episode_done': self._is_done()
         }
         reward = self.compute_reward(obs['achieved_goal'], self.goal, info)
 
@@ -94,7 +97,7 @@ class RobotEnv(gym.GoalEnv):
     def render(self, mode='human', width=DEFAULT_SIZE, height=DEFAULT_SIZE):
         # render incompatible with rgb_array mode 
         self._render_callback()
-        self._get_viewer(mode).render()
+        self._get_viewer('human').render()
 
     def _get_viewer(self, mode):
         self.viewer = self._viewers.get(mode)
@@ -110,6 +113,9 @@ class RobotEnv(gym.GoalEnv):
 
     # Extension methods
     # ----------------------------
+
+    def _is_done(self):
+        raise NotImplementedError()
 
     def _reset_sim(self):
         """Resets a simulation and indicates whether or not it was successful.
