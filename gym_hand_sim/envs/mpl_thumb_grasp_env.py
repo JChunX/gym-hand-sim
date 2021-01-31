@@ -114,7 +114,7 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
         assert d_pos.shape == d_rot.shape
         return d_pos, d_rot
 
-    def compute_reward(self, achieved_goal, goal, info):
+    def compute_reward(self):
         # TODO: will penaltizing high forces improve performance?
         reward = 0.
         if self.reward_type == 'sparse':
@@ -294,8 +294,8 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
 
         return {
             'observation': observation.copy(),
-            'achieved_goal': object_transform.copy(),
-            'desired_goal': self.goal.ravel().copy(),
+            'achieved_goal': np.zeros(1),
+            'desired_goal': np.zeros(1)
         }
 
     def _step_callback(self):
