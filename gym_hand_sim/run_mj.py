@@ -7,13 +7,14 @@ import os
 
 from mjremote import mjremote
 from mujoco_py import MjSim
+from pathlib import Path
 
 import tensorflow as tf 
 
 from tf_agents.environments import suite_mujoco
 
-
-model_dir = 'C:/Users/xieji/.mujoco/mjhaptix150/model/MPL'
+home = str(Path.home())
+model_dir = os.path.join(home,'.mujoco/mjhaptix150/model/MPL')
 model_xml = 'MPL_Handle.xml'
 
 def main():
