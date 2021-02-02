@@ -27,8 +27,7 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
         self, model_path, target_body, target_position, target_rotation,
         target_position_range, reward_type, initial_qpos=None,
         randomize_initial_position=True, randomize_initial_rotation=True,
-        distance_threshold=0.02, n_substeps=10, relative_control=False,
-        ignore_z_target_rotation=False,
+        distance_threshold=0.004, n_substeps=20,
     ):
         """
         Initializes a new Hand manipulation environment.
@@ -51,10 +50,9 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
             initial_qpos (dict): a dictionary of joint names and values that define the initial configuration
             randomize_initial_position (boolean): whether or not to randomize the initial position of the object
             randomize_initial_rotation (boolean): whether or not to randomize the initial rotation of the object
-            distance_threshold (float, in meters): the threshold after which the position of a goal is considered achieved
+            distance_threshold (float, in meters): the threshold + ball radius determines wheter ball is off ground
             n_substeps (int): number of substeps the simulation runs on every call to step
             relative_control (boolean): whether or not the hand is actuated in absolute joint positions or relative to the current state
-            ignore_z_target_rotation (boolean): whether or not the Z axis of the target rotation is ignored
         """
         self.target_body = target_body
         self.target_position = target_position
@@ -64,7 +62,6 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
         self.randomize_initial_rotation = randomize_initial_rotation
         self.randomize_initial_position = randomize_initial_position
         self.distance_threshold = distance_threshold
-        self.ignore_z_target_rotation = ignore_z_target_rotation
         self.init_object_pos = None
         self.off_ground_count = 0
         self.t = 0
@@ -75,55 +72,26 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
 
         mpl_env.MPLEnv.__init__(
             self, model_path=model_path, initial_qpos=initial_qpos, n_actions=4, 
-            n_substeps=n_substeps, relative_control=relative_control)
+            n_substeps=n_substeps)
 
-    def _get_achieved_goal(self):
-        # get goal object transform
-        # perhaps not very helpful for grasping
+    def _get_achieved_qpos(self):
+        # get target object transform
         object_qpos = self.sim.data.get_joint_qpos(self.target_body)
         assert object_qpos.shape == (7,)
         return object_qpos
 
-    def _goal_distance(self, goal_a, goal_b):
-        assert goal_a.shape == goal_b.shape
-        assert goal_a.shape[-1] == 7
-
-        d_pos = np.zeros_like(goal_a[..., 0])
-        d_rot = np.zeros_like(goal_b[..., 0])
-        if self.target_position != 'ignore':
-            delta_pos = goal_a[..., :3] - goal_b[..., :3]
-            d_pos = np.linalg.norm(delta_pos, axis=-1)
-
-        if self.target_rotation != 'ignore':
-            quat_a, quat_b = goal_a[..., 3:], goal_b[..., 3:]
-
-            if self.ignore_z_target_rotation:
-                # Special case: We want to ignore the Z component of the rotation.
-                # This code here assumes Euler angles with xyz convention. We first transform
-                # to euler, then set the Z component to be equal between the two, and finally
-                # transform back into quaternions.
-                euler_a = rotations.quat2euler(quat_a)
-                euler_b = rotations.quat2euler(quat_b)
-                euler_a[2] = euler_b[2]
-                quat_a = rotations.euler2quat(euler_a)
-
-            # Subtract quaternions and extract angle between them.
-            quat_diff = rotations.quat_mul(quat_a, rotations.quat_conjugate(quat_b))
-            angle_diff = 2 * np.arccos(np.clip(quat_diff[..., 0], -1., 1.))
-            d_rot = angle_diff
-        assert d_pos.shape == d_rot.shape
-        return d_pos, d_rot
-
-    def compute_reward(self):
-        # TODO: will penaltizing high forces improve performance?
+    def compute_reward(self, action):
         reward = 0.
+        cost = -1. * self.control_cost(action)
+        reward = reward + cost
+
         if self.reward_type == 'sparse':
             if self._is_on_ground():
-                reward += -1
-            if self.off_ground_count >= 3:
+                reward += 0
+            if self.off_ground_count >= 2:
                 reward += 5
             if self._is_done():
-                reward += -20
+                reward += -100
             return (reward)
         else:
             raise NotImplementedError()
@@ -131,13 +99,8 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
     def _is_done(self):
         return (np.linalg.norm(self.init_object_pos[:2] - self.sim.data.get_joint_qpos(self.target_body)[:2]) >= 0.1)
 
-    def _is_success(self, achieved_goal, desired_goal):
-        d_pos, d_rot = self._goal_distance(achieved_goal, desired_goal)
-        achieved_pos = (d_pos < self.distance_threshold).astype(np.float32)
-        return achieved_pos
-
     def _is_on_ground(self):
-        on_ground = (self.sim.data.get_joint_qpos(self.target_body)[2] - 0.0) <= 0.044
+        on_ground = (self.sim.data.get_joint_qpos(self.target_body)[2] - 0.0) <= (0.04 + self.distance_threshold)
         if not on_ground:
             self.off_ground_count += 1
         else:
@@ -219,73 +182,41 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
                 return False
         return True
 
-    def _sample_goal(self):
-        # Select a goal for the object position
-        target_pos = None
-        if self.target_position == 'random':
-            assert self.target_position_range.shape == (3, 2)
-            offset = self.np_random.uniform(self.target_position_range[:, 0], self.target_position_range[:, 1])
-            assert offset.shape == (3,)
-            target_pos = self.sim.data.get_joint_qpos(self.target_body)[:3] + offset
-        elif self.target_position in ['ignore', 'fixed']:
-            target_pos = self.sim.data.get_joint_qpos(self.target_body)[:3]
-        else:
-            raise error.Error('Unknown target_position option "{}".'.format(self.target_position))
-        assert target_pos is not None
-        assert target_pos.shape == (3,)
-
-        # Select a goal for the object rotation.
-        target_quat = None
-        if self.target_rotation == 'z':
-            angle = self.np_random.uniform(-np.pi, np.pi)
-            axis = np.array([0., 0., 1.])
-            target_quat = quat_from_angle_and_axis(angle, axis)
-        elif self.target_rotation == 'parallel':
-            angle = self.np_random.uniform(-np.pi, np.pi)
-            axis = np.array([0., 0., 1.])
-            target_quat = quat_from_angle_and_axis(angle, axis)
-            parallel_quat = self.parallel_quats[self.np_random.randint(len(self.parallel_quats))]
-            target_quat = rotations.quat_mul(target_quat, parallel_quat)
-        elif self.target_rotation == 'xyz':
-            angle = self.np_random.uniform(-np.pi, np.pi)
-            axis = self.np_random.uniform(-1., 1., size=3)
-            target_quat = quat_from_angle_and_axis(angle, axis)
-        elif self.target_rotation in ['ignore', 'fixed']:
-            target_quat = self.sim.data.get_joint_qpos(self.target_body)[3:]
-        else:
-            raise error.Error('Unknown target_rotation option "{}".'.format(self.target_rotation))
-        assert target_quat is not None
-        assert target_quat.shape == (4,)
-
-        target_quat /= np.linalg.norm(target_quat)  # normalized quaternion
-        goal = np.concatenate([target_pos, target_quat])
-        return goal
-
     def _render_callback(self):
         self.sim.forward()
 
     def _set_action(self, action):
-        '''Apply to thumb ABD, MCP, PIP, and DIP joints
+        '''Apply to thumb ABD, MCP, DIP, wrist PRO 
+           thumb PIP follows MCP
         '''
+        ctrl_idx = [2, 3, 4, 6]
+        follow_idx = (2, 5) # actuator no. 5 follows action[2]
+        # simulate user grasp on digits
         self.sim.data.ctrl[8:11] = min(0.2 + self.t/50., 0.6) + random.randrange(-1,1) * 0.01
         self.sim.data.ctrl[12] = min(.2 + self.t/50., 0.6) + random.randrange(-1,1) * 0.01
+        self.sim.data.ctrl[7] = 0.2 + random.randrange(-1,1) * 0.01
+        self.sim.data.ctrl[11] = 0.2 + random.randrange(-1,1) * 0.01
+
         assert action.shape == (self.n_actions,)
         ctrlrange = self.sim.model.actuator_ctrlrange
         actuation_range = (ctrlrange[:, 1] - ctrlrange[:, 0]) / 2.
         actuation_center = (ctrlrange[:, 1] + ctrlrange[:, 0]) / 2.
-        actuation_range = actuation_range[3:7]
-        actuation_center = actuation_center[3:7]
-        action = (action - 5) / 5.
-        self.sim.data.ctrl[3:7] = actuation_center + action * actuation_range
-        self.sim.data.ctrl[3:7] = np.clip(self.sim.data.ctrl[3:7], ctrlrange[3:7, 0], ctrlrange[3:7, 1])
+
+        #action = (action - 5) / 5.
+
+        for j, idx in enumerate(ctrl_idx):
+            self.sim.data.ctrl[idx] = actuation_center[idx] + action[j] * actuation_range[idx]
+            self.sim.data.ctrl[idx] = np.clip(self.sim.data.ctrl[idx], ctrlrange[idx][0], ctrlrange[idx][1])
+
+        self.sim.data.ctrl[follow_idx[1]] = actuation_center[follow_idx[1]] + action[follow_idx[0]] * actuation_range[follow_idx[1]] * 0.25
 
     def _get_obs(self):
 
         robot_qpos, robot_qvel = robot_get_obs(self.sim)
-        robot_qpos = np.delete(robot_qpos, [0, 1, 2, 7, 14, 18]) # ignore fixed joints
-        robot_qvel = np.delete(robot_qvel, [0, 1, 2, 7, 14, 18])
+        robot_qpos = np.delete(robot_qpos, [0, 1, 7, 14, 18]) # ignore fixed joints: Wrist UDEV+PRO, ABDs 
+        robot_qvel = np.delete(robot_qvel, [1, 2, 7, 14, 18])
         object_qvel = self.sim.data.get_joint_qvel(self.target_body)
-        object_transform = self._get_achieved_goal().ravel()  # this contains the object position + rotation
+        object_transform = self._get_achieved_qpos().ravel()  # this contains the object position + rotation
         mocap_pos = self.sim.data.mocap_pos.ravel()
         mocap_quat = self.sim.data.mocap_quat.ravel()
 
@@ -293,20 +224,28 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
         observation = np.concatenate([robot_qpos, robot_qvel, mocap_pos, mocap_quat, object_transform, object_qvel])
 
         return {
-            'observation': observation.copy(),
-            'achieved_goal': np.zeros(1),
-            'desired_goal': np.zeros(1)
+            'observation': observation.copy()
         }
 
     def _step_callback(self):
-        '''
-        Emulates hand user behavior during grasp
-        Initiates a grasp with digits
-        Moves the hand's mocap body in some trajectory
 
-        '''
         self.t += 1
         return
+
+    def step(self, action):
+        action = np.clip(action, 0, 11)
+        self._set_action(action)
+        self.sim.step()
+        self._step_callback()
+        obs = self._get_obs()
+
+        done = self._is_done()
+        info = {
+            'episode_done': self._is_done()
+        }
+        reward = self.compute_reward(action)
+
+        return obs, reward, done, info
 
 
 

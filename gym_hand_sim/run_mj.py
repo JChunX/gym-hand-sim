@@ -48,12 +48,16 @@ def main():
         env.reset()
         i = 0
         t0 = time.time()
+        returns = 0
         while True:
             if not cap:
                 env.render()
-                obs, reward, done, info = env.step(env.action_space.sample())
+                action = env.action_space.sample()
+                obs, reward, done, info = env.step(action)
+                returns += reward
 
-                if info['episode_done'] or i > MAX_EPISODE_STEPS:
+                if done or i > MAX_EPISODE_STEPS:
+                    print(returns)
                     break
             else:
                 # mocap

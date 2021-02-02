@@ -2,6 +2,8 @@ import os
 import copy
 import numpy as np
 
+from collections import OrderedDict
+
 import gym
 from gym import error, spaces
 from gym.utils import seeding
@@ -13,7 +15,8 @@ except ImportError as e:
 
 DEFAULT_SIZE = 500
 
-class RobotEnv(gym.GoalEnv):
+
+class RobotEnv(gym.Env):
     def __init__(self, model_path, initial_qpos, n_actions, n_substeps):
         if model_path.startswith('/'):
             fullpath = model_path
@@ -37,15 +40,12 @@ class RobotEnv(gym.GoalEnv):
         self._env_setup(initial_qpos=initial_qpos)
         self.initial_state = copy.deepcopy(self.sim.get_state())
 
-        self.goal = self._sample_goal()
         obs = self._get_obs()
-        #self.action_space = spaces.Box(-1., 1., shape=(n_actions,), dtype='float32')
+        self.action_space = spaces.Box(-1., 1., shape=(n_actions,), dtype='float32')
         # Use discrete action space instead
-        self.action_space = spaces.MultiDiscrete(list(np.zeros(n_actions) + 11))
-        self.observation_space = spaces.Dict(dict(
-            desired_goal=spaces.Box(-np.inf, np.inf, shape=obs['achieved_goal'].shape, dtype='float32'),
-            achieved_goal=spaces.Box(-np.inf, np.inf, shape=obs['achieved_goal'].shape, dtype='float32'),
-            observation=spaces.Box(-np.inf, np.inf, shape=obs['observation'].shape, dtype='float32'),
+        #self.action_space = spaces.MultiDiscrete(list(np.zeros(n_actions) + 11))
+        self.observation_space = spaces.Dict(OrderedDict(
+            observation=spaces.Box(-np.inf, np.inf, shape=obs['observation'].shape, dtype='float32')
         ))
 
     @property
@@ -59,31 +59,15 @@ class RobotEnv(gym.GoalEnv):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def step(self, action):
-        action = np.clip(action, 0, 11)
-        self._set_action(action)
-        self.sim.step()
-        self._step_callback()
-        obs = self._get_obs()
-
-        info = {
-            'episode_done': self._is_done()
-        }
-        reward = self.compute_reward()
-
-        return obs, reward, False, info
-
     def reset(self):
         # Attempt to reset the simulator. Since we randomize initial conditions, it
         # is possible to get into a state with numerical issues (e.g. due to penetration or
         # Gimbel lock) or we may not achieve an initial condition (e.g. an object is within the hand).
         # In this case, we just keep randomizing until we eventually achieve a valid initial
         # configuration.
-        super(RobotEnv, self).reset()
         did_reset_sim = False
         while not did_reset_sim:
             did_reset_sim = self._reset_sim()
-        self.goal = self._sample_goal().copy()
         obs = self._get_obs()
         return obs
 
