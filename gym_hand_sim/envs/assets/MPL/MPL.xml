@@ -105,7 +105,7 @@
 		
         <camera name="fixed" pos="0 -0.7 0.7" zaxis="0 -1 1" fovy="45" ipd="0.068"/>
     
-		<geom type="plane" material="table2d" pos="0 0 0" size=".5 .5 .025"/>
+		<geom type="plane" material="table2d" pos="0 0 0" size="5 5 .025"/>
 
 		<geom contype="0" conaffinity="0" type="box" material="tablecube" pos="0 0 -0.026" size=".5 .5 .025"/>
 		<geom contype="0" conaffinity="0" type="cylinder" fromto=".4 .4 -1.001 .4 .4 -0.001" size="0.04"/>

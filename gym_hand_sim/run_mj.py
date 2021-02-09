@@ -15,6 +15,7 @@ from tf_agents.environments import suite_mujoco
 
 home = str(Path.home())
 model_dir = os.path.join(home,'.mujoco/mjhaptix150/model/MPL')
+checkpoint_dir = os.path.join(home, '')
 model_xml = 'MPL_Handle.xml'
 
 def main():
@@ -23,7 +24,7 @@ def main():
     cap = False
     xml_path = os.path.join(model_dir, model_xml)
     model = mujoco_py.load_model_from_path(xml_path)
-    env = gym.make('gym_hand_sim:MplThumbGraspBall-v0')
+    env = gym.make('gym_hand_sim:MplThumbGraspBall-v0').env
 
     MAX_EPISODE_STEPS = 50
 
@@ -55,9 +56,8 @@ def main():
                 action = env.action_space.sample()
                 obs, reward, done, info = env.step(action)
                 returns += reward
-
-                if done or i > MAX_EPISODE_STEPS:
-                    print(returns)
+                #print(reward)
+                if done:
                     break
             else:
                 # mocap

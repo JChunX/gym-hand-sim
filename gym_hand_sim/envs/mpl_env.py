@@ -9,7 +9,7 @@ class MPLEnv(robot_env.RobotEnv):
         n_actions, n_substeps
     ):
         self.n_actions = n_actions
-        self._ctrl_cost_weight =  0.05
+        self._ctrl_cost_weight =  1e-3
 
         super().__init__(
             model_path=model_path,

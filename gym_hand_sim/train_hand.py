@@ -46,6 +46,7 @@ from tf_agents.drivers import dynamic_episode_driver
 from tf_agents.environments import parallel_py_environment
 from tf_agents.environments import suite_mujoco
 from tf_agents.environments import tf_py_environment
+from tf_agents.environments import wrappers
 from tf_agents.eval import metric_utils
 from tf_agents.metrics import tf_metrics
 from tf_agents.networks import actor_distribution_network
@@ -57,7 +58,23 @@ from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.system import system_multiprocessing as multiprocessing
 from tf_agents.utils import common
 
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        # Currently, memory growth needs to be the same across GPUs
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+    except RuntimeError as e:
+        # Memory growth must be set before GPUs have been initialized
+        print(e)
+
 from gym_hand_sim.envs import mpl_thumb_grasp_env
+
+assert tf.test.is_gpu_available()
+assert tf.test.is_built_with_cuda()
+
 #tensorboard --logdir 'C:/users/xieji/repos/tmp/ppo/gym/MplThumbGraspBall-v0/' --port 2223 & 
 #python tf_agents/agents/ppo/examples/v2/train_hand.py \ --root_dir='C:/users/xieji/repos/tmp/ppo/gym/MplThumbGraspBall-v0/' \ --logtostderr
 
@@ -66,9 +83,9 @@ flags.DEFINE_string('root_dir', os.getenv('TEST_UNDECLARED_OUTPUTS_DIR'),
 flags.DEFINE_string('env_name', 'gym_hand_sim:MplThumbGraspBall-v0', 'Name of an environment')
 flags.DEFINE_integer('replay_buffer_capacity', 1001,
                      'Replay buffer capacity per env.')
-flags.DEFINE_integer('num_parallel_environments', 16,
+flags.DEFINE_integer('num_parallel_environments', 20,
                      'Number of environments to run in parallel')
-flags.DEFINE_integer('num_environment_steps', 250000,
+flags.DEFINE_integer('num_environment_steps', 2500000,
                      'Number of environment steps to run before finishing.')
 flags.DEFINE_integer('num_epochs', 25,
                      'Number of epochs for computing policy updates.')
@@ -91,17 +108,17 @@ def train_eval(
     env_load_fn=suite_mujoco.load,
     random_seed=None,
     # TODO(b/127576522): rename to policy_fc_layers.
-    actor_fc_layers=(200, 100),
-    value_fc_layers=(200, 100),
+    actor_fc_layers=(512,256),
+    value_fc_layers=(512,256),
     use_rnns=True,
     # Params for collect
     num_environment_steps=2500000,
     collect_episodes_per_iteration=30,
-    num_parallel_environments=16,
+    num_parallel_environments=20,
     replay_buffer_capacity=1001,  # Per-environment
     # Params for train
     num_epochs=25,
-    learning_rate=1e-3,
+    learning_rate=1e-4,
     # Params for eval
     num_eval_episodes=30,
     eval_interval=500,
@@ -139,10 +156,16 @@ def train_eval(
       lambda: tf.math.equal(global_step % summary_interval, 0)):
     if random_seed is not None:
       tf.compat.v1.set_random_seed(random_seed)
-    eval_tf_env = tf_py_environment.TFPyEnvironment(env_load_fn(env_name))
+
+    eval_py_env = env_load_fn(env_name) 
+    eval_tf_env = tf_py_environment.TFPyEnvironment(eval_py_env)
     tf_env = tf_py_environment.TFPyEnvironment(
         parallel_py_environment.ParallelPyEnvironment(
             [lambda: env_load_fn(env_name)] * num_parallel_environments))
+
+    #tf_env = wrappers.ActionDiscretizeWrapper(tf_env, num_actions=11)
+    #eval_tf_env = wrappers.ActionDiscretizeWrapper(eval_tf_env, num_actions=11)
+
     optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate, epsilon = 1e-5)
 
     if use_rnns:
@@ -151,13 +174,13 @@ def train_eval(
           tf_env.action_spec(),
           preprocessing_layers = {'observation': tf.keras.layers.experimental.preprocessing.Normalization()},
           input_fc_layer_params=actor_fc_layers,
-          lstm_size = (100,),
+          lstm_size = (256,),
           output_fc_layer_params=None)
       value_net = value_rnn_network.ValueRnnNetwork(
           tf_env.observation_spec(),
           preprocessing_layers = {'observation': tf.keras.layers.experimental.preprocessing.Normalization()},
           input_fc_layer_params=value_fc_layers,
-          lstm_size = (100,),
+          lstm_size = (256,),
           output_fc_layer_params=None)
     else:
       actor_net = actor_distribution_network.ActorDistributionNetwork(
@@ -176,8 +199,8 @@ def train_eval(
         optimizer,
         actor_net=actor_net,
         value_net=value_net,
-        entropy_regularization=0.0,
-        importance_ratio_clipping=0.2,
+        entropy_regularization=0.01,
+        importance_ratio_clipping=0.03,
         normalize_observations=False,
         normalize_rewards=False,
         use_gae=True,
@@ -303,6 +326,13 @@ def train_eval(
         summary_prefix='Metrics',
     )
 
+    for _ in range(num_eval_episodes):
+      time_step = eval_tf_env.reset()
+      policy_state = eval_policy.get_initial_state(eval_tf_env.batch_size)
+      while True:
+        action_step = eval_policy.action(time_step, policy_state)
+        time_step = eval_tf_env.step(action_step.action)
+        eval_py_env.render()
 
 def main(_):
   logging.set_verbosity(logging.INFO)
@@ -317,7 +347,6 @@ def main(_):
       replay_buffer_capacity=FLAGS.replay_buffer_capacity,
       num_epochs=FLAGS.num_epochs,
       num_eval_episodes=FLAGS.num_eval_episodes)
-
 
 if __name__ == '__main__':
   flags.mark_flag_as_required('root_dir')
