@@ -1,3 +1,5 @@
 from gym_hand_sim.envs.mpl_env import MPLEnv
 from gym_hand_sim.envs.mpl_thumb_grasp_env import MPLThumbGraspEnv
-from gym_hand_sim.envs.mpl_thumb_grasp_env import MPLThumbGraspBallEnv
+from gym_hand_sim.envs.mpl_thumb_grasp_env import MPLThumbGraspTrainEnv
+from gym_hand_sim.envs.mpl_thumb_grasp_env import MPLThumbGraspOpEnv
+from gym_hand_sim.envs.mpl_thumb_grasp_env import MPLThumbGraspTrackEnv

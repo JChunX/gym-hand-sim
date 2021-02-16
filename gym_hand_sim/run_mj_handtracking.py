@@ -19,7 +19,7 @@ def main():
     cap = True
     xml_path = os.path.join(model_dir, model_xml)
     model = mujoco_py.load_model_from_path(xml_path)
-    env = gym.make('gym_hand_sim:MplThumbGraspOp-v0').env
+    env = gym.make('gym_hand_sim:MplThumbGraspTrack-v0').env
 
     if cap:
         remote = mjremote()
@@ -33,6 +33,7 @@ def main():
         print(env.sim.data.mocap_pos)
         if cap:
             remote.movecamera(env.init_object_pos)
+        done= False
 
         while True:
             if not cap:
@@ -49,14 +50,17 @@ def main():
                     obs, reward, done, info = env.step(action)
                 # mocap
                 grip, pos, quat = remote.getOVRControllerInput()
+                test = remote.getOVRHandInput()
+
                 env.sim.data.mocap_pos[:] = pos
                 env.sim.data.mocap_quat[:] = quat
                 remote.setmocap(pos, quat)
 
                 # actuation
                 env.sim.data.ctrl[5] = 0.45
-                env.sim.data.ctrl[8:11] = grip
-                env.sim.data.ctrl[12] = grip
+
+                for j, t in enumerate(test):
+                    env.sim.data.ctrl[3 + j] = t
 
                 # render
                 qpos = env.sim.data.qpos

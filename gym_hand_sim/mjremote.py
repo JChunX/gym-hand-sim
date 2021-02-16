@@ -74,6 +74,14 @@ class mjremote:
         self._s.sendall(struct.pack("i", 5))
         self._s.sendall(struct.pack("i", index))
 
+    def movecamera(self, pos):
+        if not self._s:
+            return 'Not connected'
+        if len(pos)!=3:
+            return 'pos has wrong size'
+        fpos = pos.astype('float32')
+        self._s.sendall(struct.pack("i", 6))
+        self._s.sendall(fpos.tobytes())
 
     # qpos = numpy.ndarray(nqpos)
     def setqpos(self, qpos):
@@ -82,7 +90,7 @@ class mjremote:
         if len(qpos)!=self.nqpos:
             return 'qpos has wrong size'
         fqpos = qpos.astype('float32')
-        self._s.sendall(struct.pack("i", 6))
+        self._s.sendall(struct.pack("i", 7))
         self._s.sendall(fqpos.tobytes())
 
 
@@ -96,14 +104,14 @@ class mjremote:
             return 'quat has wrong size'
         fpos = pos.astype('float32')
         fquat = quat.astype('float32')
-        self._s.sendall(struct.pack("i", 7))
+        self._s.sendall(struct.pack("i", 8))
         self._s.sendall(fpos.tobytes())
         self._s.sendall(fquat.tobytes())
 
-    def getOVRinput(self):
+    def getOVRControllerInput(self):
         if not self._s:
             return 'Not connected'
-        self._s.sendall(struct.pack("i", 8))
+        self._s.sendall(struct.pack("i", 9))
         data = bytearray(32)
         self._recvall(data)
         result = struct.unpack('ffffffff', data)
@@ -111,3 +119,12 @@ class mjremote:
         pos = np.array(list(result[1:4]))
         quat = np.array(list(result[4:]))
         return grip, pos, quat
+
+    def getOVRHandInput(self):
+        if not self._s:
+            return 'Not connected'
+        self._s.sendall(struct.pack("i", 10))
+        data = bytearray(40)
+        self._recvall(data)
+        result = struct.unpack('ffffffffff', data)
+        return result
