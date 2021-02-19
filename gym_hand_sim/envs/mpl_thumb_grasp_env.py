@@ -91,9 +91,9 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
     def compute_reward(self, action):
         reward = 0.
         #cost = -1. * self.control_cost(action)
-        cost = -0.1 * np.linalg.norm(self.sim.data.get_joint_qvel(self.target_body))
+        #cost = -0.1 * np.linalg.norm(self.sim.data.get_joint_qvel(self.target_body))
 
-        reward = reward + cost
+        #reward = reward + cost
 
         if self.reward_type == 'sparse':
             lifted, dropped = self._is_on_ground()
@@ -303,7 +303,7 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
         delta = object_pos - mocap_pos
 
         observation = np.concatenate([palm, fingers, robot_qpos, robot_qvel, np.zeros(delta.size), np.zeros(object_qvel.size)])
-        observation += self.np_random.normal(size=observation.size, scale=0.005)
+        #observation += self.np_random.normal(size=observation.size, scale=0.005)
 
         return {
             'observation': observation.copy()

@@ -16,7 +16,7 @@ model_xml = 'MPL_Basic.xml'
 def main():
 
 
-    cap = True
+    cap = False
     xml_path = os.path.join(model_dir, model_xml)
     model = mujoco_py.load_model_from_path(xml_path)
     env = gym.make('gym_hand_sim:MplThumbGraspOp-v0').env
@@ -39,6 +39,7 @@ def main():
                 env.render()
                 action = env.action_space.sample()
                 obs, reward, done, info = env.step(action)
+                print(obs)
                 returns += reward
 
                 if done:
