@@ -30,7 +30,6 @@ def main():
         i = 0
         t0 = time.time()
         returns = 0
-        print(env.sim.data.mocap_pos)
         if cap:
             remote.movecamera(env.init_object_pos)
         done= False
@@ -45,22 +44,23 @@ def main():
                 if done:
                     break
             else:
-                if i % 1 == 0:
-                    action = env.action_space.sample()
-                    obs, reward, done, info = env.step(action)
+                action = env.action_space.sample()
+                obs, reward, done, info = env.step(np.zeros(action.size))
                 # mocap
+                is_controller = remote.getOVRControlType()
                 grip, pos, quat = remote.getOVRControllerInput()
-                test = remote.getOVRHandInput()
+                hand_pose = remote.getOVRHandInput()
 
                 env.sim.data.mocap_pos[:] = pos
                 env.sim.data.mocap_quat[:] = quat
                 remote.setmocap(pos, quat)
 
-                # actuation
-                env.sim.data.ctrl[5] = 0.45
-
-                for j, t in enumerate(test):
-                    env.sim.data.ctrl[3 + j] = t
+                if is_controller == 0:
+                    for j, pose in enumerate(hand_pose):
+                        env.sim.data.ctrl[3 + j] = pose
+                else:
+                    env.sim.data.ctrl[8:11] = grip
+                    env.sim.data.ctrl[12] = grip
 
                 # render
                 qpos = env.sim.data.qpos

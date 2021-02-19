@@ -269,17 +269,24 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
             self.sim.data.ctrl[:] += self.np_random.normal(size=self.sim.data.ctrl.size, scale=0.001)
 
         elif self.control_mode == 'mixed':
-            self.sim.data.ctrl[:8] = 0.
-            self.sim.data.ctrl[11:] = 0.
 
-            if (np.max(self.sim.data.ctrl[8:11]) > 0.1):
+            #self.sim.data.ctrl[:3] = 0.
+            #self.sim.data.ctrl[3] = 0.45
+            #self.sim.data.ctrl[4] = 0.3
+            #self.sim.data.ctrl[5] = 0.2
+            self.sim.data.ctrl[6] = 0.2
+            #self.sim.data.ctrl[11:] = 0.25
+
+            if (np.max(self.sim.data.ctrl[8:10]) > 0.8):
+
                 for j, idx in enumerate(ctrl_idx):
                     self.sim.data.ctrl[idx] = actuation_center[idx] + action[j] * actuation_range[idx]
                     self.sim.data.ctrl[idx] = np.clip(self.sim.data.ctrl[idx], ctrlrange[idx][0], ctrlrange[idx][1])
 
                 for follow in follow_idx:
                     self.sim.data.ctrl[follow[1]] = actuation_center[follow[1]] + action[follow[0]] * actuation_range[follow[1]] * follow[2]
-            self.sim.data.ctrl[2] = 0
+
+            self.sim.data.ctrl[2] = 0.
 
         elif self.control_mode == 'tracked':
             pass
@@ -329,7 +336,7 @@ class MPLThumbGraspTrainEnv(MPLThumbGraspEnv, utils.EzPickle):
             model_path=THUMB_GRASP_XML, n_targets=30, target_body='obj_:joint',
             target_position=target_position,
             target_rotation=target_rotation,
-            target_position_range=np.array([(-0.04, 0.04), (-0.02, 0.02), (0., 0.)]),
+            target_position_range=np.array([(-0.06, 0.06), (-0.03, 0.03), (0., 0.)]),
             reward_type=reward_type, 
             control_mode='simulated'
             )

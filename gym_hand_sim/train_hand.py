@@ -42,6 +42,7 @@ from mjremote import mjremote
 from gym_hand_sim.envs import mpl_thumb_grasp_env
 import suite_mujoco
 import gym
+import numpy as np
 
 import gin
 import tensorflow as tf  # pylint: disable=g-explicit-tensorflow-version-import
@@ -110,7 +111,7 @@ FLAGS = flags.FLAGS
 @gin.configurable
 def train_eval(
     root_dir,
-    env_name='gym_hand_sim:MplThumbGraspTrain-v0-v0',
+    env_name='gym_hand_sim:MplThumbGraspTrain-v0',
     op_env_name='gym_hand_sim:MplThumbGraspOp-v0',
     env_load_fn=suite_mujoco.load,
     random_seed=None,
@@ -357,21 +358,32 @@ def train_eval(
       time_step = op_tf_env.reset()
       policy_state = eval_policy.get_initial_state(op_tf_env.batch_size)
       remote.movecamera(op_py_env.init_object_pos)
+
       while not time_step.is_last():
         action_step = eval_policy.action(time_step, policy_state)
         time_step = op_tf_env.step(action_step.action)
         # mocap
+        is_controller = remote.getOVRControlType()
         grip, pos, quat = remote.getOVRControllerInput()
+        hand_pose = remote.getOVRHandInput()
+
         op_py_env.sim.data.mocap_pos[:] = pos
         op_py_env.sim.data.mocap_quat[:] = quat
         remote.setmocap(pos, quat)
 
         # actuation
-        op_py_env.sim.data.ctrl[8:11] = grip
+        if is_controller == 0:
+          for j, pose in enumerate(hand_pose):
+            op_py_env.sim.data.ctrl[3 + j] = pose
+        else:
+          op_py_env.sim.data.ctrl[8:11] = grip
 
         # render
         qpos = op_py_env.sim.data.qpos
         remote.setqpos(qpos)
+        with open('actions.npy', 'wb') as f:
+          np.save(f, qpos)
+          np.save(f, op_py_env.sim.data.ctrl)
 
 def main(_):
   logging.set_verbosity(logging.INFO)

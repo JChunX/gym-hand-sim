@@ -128,3 +128,12 @@ class mjremote:
         self._recvall(data)
         result = struct.unpack('ffffffffff', data)
         return result
+
+    def getOVRControlType(self):
+        if not self._s:
+            return 'Not connected'
+        self._s.sendall(struct.pack("i", 11))
+        data = bytearray(4)
+        self._recvall(data)
+        result = struct.unpack('i', data)
+        return result[0]
