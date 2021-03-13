@@ -305,6 +305,7 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
         observation = np.concatenate([palm, fingers, robot_qpos, robot_qvel, np.zeros(delta.size), np.zeros(object_qvel.size)])
         #observation += self.np_random.normal(size=observation.size, scale=0.005)
 
+
         return {
             'observation': observation.copy()
         }
