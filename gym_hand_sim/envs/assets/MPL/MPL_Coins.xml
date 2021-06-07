@@ -1,4 +1,9 @@
 <mujoco>
+
+	<option impratio="20"/>
+    <option cone="elliptic"/>
+    <option o_solimp="0.99 0.99 0.01"/>
+    <option o_solref="0.01 1"/>
 	<include file="MPL.xml"/>
 	<include file="assets.xml"/>
 
@@ -9,15 +14,15 @@
 		<geom name="jback"  type="box" material="MatWood" size="0.045 0.005 0.05" pos="0 -.04 0.04"/>	
 		
 		<body name="Coin0" pos="0.10 -0.05 .15">
-			<geom type="cylinder" size="0.017 0.005" material="MatSquare"/>
+			<geom type="cylinder" size="0.017 0.005" material="MatSquare" condim="4"/>
 			<joint class="free" />
 		</body>
 		<body name="Coin1" pos="0.15 -0.05 .15">
-			<geom type="cylinder" size="0.017 0.005" material="MatSquare"/>
+			<geom type="cylinder" size="0.017 0.005" material="MatSquare" condim="4"/>
 			<joint class="free" />
 		</body>
 		<body name="Coin2" pos="0.20 -0.05 .15">
-			<geom type="cylinder" size="0.017 0.005" material="MatSquare"/>
+			<geom type="cylinder" size="0.017 0.005" material="MatSquare" condim="4"/>
 			<joint class="free" />
 		</body>
 	</worldbody>

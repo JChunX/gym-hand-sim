@@ -15,10 +15,11 @@ model_xml = 'MPL_Basic.xml'
 
 def main():
 
-    cap = True
+    cap = False
+    
     xml_path = os.path.join(model_dir, model_xml)
     model = mujoco_py.load_model_from_path(xml_path)
-    env = gym.make('gym_hand_sim:MplThumbGraspOp-v0').env
+    env = gym.make('gym_hand_sim:MplThumbGraspTrain-v0').env
 
     if cap:
         remote = mjremote()
@@ -29,7 +30,7 @@ def main():
         i = 0
         t0 = time.time()
         returns = 0
-        print(env.sim.data.mocap_pos)
+
         if cap:
             remote.movecamera(env.init_object_pos)
 
@@ -38,15 +39,12 @@ def main():
                 env.render()
                 action = env.action_space.sample()
                 obs, reward, done, info = env.step(action)
-                print(obs)
                 returns += reward
 
                 if done:
                     break
             else:
-                if i % 1 == 0:
-                    action = env.action_space.sample()
-                    obs, reward, done, info = env.step(action)
+
                 # mocap
                 grip, pos, quat = remote.getOVRControllerInput()
                 env.sim.data.mocap_pos[:] = pos
@@ -61,8 +59,6 @@ def main():
                 # render
                 qpos = env.sim.data.qpos
                 remote.setqpos(qpos)
-                if done:
-                    break
 
             i += 1
             if i % 1000 == 0:

@@ -1,8 +1,11 @@
 <mujoco>
+    <option impratio="20"/>
+    <option cone="pyramidal"/>
+    <option o_solimp="0.99 0.99 0.01"/>
+    <option o_solref="0.01 1"/>
     <include file="MPL.xml"/>
     <include file="assets.xml"/>
 
-    <option cone="pyramidal"/>
     <size njmax="2000" nconmax="1000" nstack="5000000"/>
 
     <default>

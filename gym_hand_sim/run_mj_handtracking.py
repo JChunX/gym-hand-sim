@@ -44,8 +44,7 @@ def main():
                 if done:
                     break
             else:
-                action = env.action_space.sample()
-                obs, reward, done, info = env.step(np.zeros(action.size))
+
                 # mocap
                 is_controller = remote.getOVRControlType()
                 grip, pos, quat = remote.getOVRControllerInput()
@@ -62,8 +61,11 @@ def main():
                     env.sim.data.ctrl[8:11] = grip
                     env.sim.data.ctrl[12] = grip
 
+                action = env.action_space.sample()
+                obs, reward, done, info = env.step(np.zeros(action.size))
                 # render
                 qpos = env.sim.data.qpos
+
                 remote.setqpos(qpos)
                 if done:
                     break

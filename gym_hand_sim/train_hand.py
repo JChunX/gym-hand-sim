@@ -81,7 +81,7 @@ if gpus:
 assert tf.test.is_gpu_available()
 assert tf.test.is_built_with_cuda()'''
 
-#tensorboard --logdir 'C:/users/xieji/repos/tmp/ppo/gym/MplThumbGraspBall-random/' --port 2223 & 
+#tensorboard --logdir 'C:/users/xieji/repos/tmp/ppo/gym/MplThumbGraspBall-random/' --port 2223  
 # python train_hand.py \ --root_dir='C:/users/xieji/repos/tmp/ppo/gym/MplThumbGraspBall-random/' \ --logtostderr \ --num_environment_steps=20 \ --num_parallel_environments=13
 
 flags.DEFINE_string('root_dir', os.getenv('TEST_UNDECLARED_OUTPUTS_DIR'),
@@ -324,7 +324,7 @@ def train_eval(
         timed_at_step = global_step_val
         collect_time = 0
         train_time = 0
-    '''
+    
     # One final eval before exiting.
     metric_utils.eager_compute(
         eval_metrics,
@@ -334,22 +334,22 @@ def train_eval(
         train_step=global_step,
         summary_writer=eval_summary_writer,
         summary_prefix='Metrics',
-    )'''
+    )
 
     print("done")
     time.sleep(10)
     print("starting teleop")
 
-    '''
+    
     for _ in range(num_eval_episodes):
       time_step = eval_tf_env.reset()
       policy_state = eval_policy.get_initial_state(eval_tf_env.batch_size)
       while True:
         action_step = eval_policy.action(time_step, policy_state)
         time_step = eval_tf_env.step(action_step.action)
-        eval_py_env.render()'''
+        eval_py_env.render()
 
-
+'''
     # Let human operate along with agent
     remote = mjremote()
     result = remote.connect()
@@ -383,7 +383,7 @@ def train_eval(
         remote.setqpos(qpos)
         with open('actions.npy', 'wb') as f:
           np.save(f, qpos)
-          np.save(f, op_py_env.sim.data.ctrl)
+          np.save(f, op_py_env.sim.data.ctrl)'''
 
 def main(_):
   logging.set_verbosity(logging.INFO)

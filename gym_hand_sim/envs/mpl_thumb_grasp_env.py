@@ -88,19 +88,32 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
         assert object_qpos.shape == (7,)
         return object_qpos
 
-    def compute_reward(self, action):
+    def compute_reward(self, action, obs):
         reward = 0.
+        cost = 0.
         #cost = -1. * self.control_cost(action)
         #cost = -0.1 * np.linalg.norm(self.sim.data.get_joint_qvel(self.target_body))
 
-        #reward = reward + cost
+        thumb_pos = self.sim.data.get_body_xpos('thumb3')
+        index_pos = self.sim.data.get_body_xpos('index3')
+        middle_pos = self.sim.data.get_body_xpos('middle3')
+        ring_pos = self.sim.data.get_body_xpos('ring3')
+        pinky_pos = self.sim.data.get_body_xpos('pinky3')
+
+        thumb_dists = [np.linalg.norm(thumb_pos-pos) for pos in [index_pos, middle_pos, ring_pos, pinky_pos]]
+        thumb_dists[-1] -= 0.01
+        thumb_dists[-2] -= 0.005
+        #cost = -3 * np.std(thumb_dists)
+        reward = reward + cost
 
         if self.reward_type == 'sparse':
             lifted, dropped = self._is_on_ground()
             if not lifted:
                 reward += 0
-            if self.off_ground_count >= 2:
-                reward = +1
+            if (self.off_ground_count >= 2):
+                reward = 1
+            if (self.off_ground_count >= 2 and abs(max(obs[:2])) < 0.1 and np.where(obs[2:7] > 0.5)[0].size >= 3):
+                reward = 2
             if dropped:
                 reward += -0
             if self._is_done():
@@ -216,7 +229,7 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
         self.sim.data.set_joint_qpos(self.target_body, initial_qpos)
 
         # set mocap body
-        self.sim.data.mocap_pos[:] = self.init_object_pos + np.array([0.00,-0.17,0.04])
+        self.sim.data.mocap_pos[:] = self.init_object_pos + np.array([0.00,-0.17,0.06])
         self.sim.data.mocap_quat[:] = initial_mocap_quat.copy()
 
         # Run the simulation for a bunch of timesteps to let everything settle in.
@@ -238,7 +251,7 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
 
 
         ctrl_idx = [2, 3, 4, 12, 7]
-        follow_idx = [(2, 5, 0.5), (4, 11, 1.)] # actuator no. 5 follows action[2] with multiplier 0.5.. etc
+        follow_idx = [(2, 5, 0.5), (4, 11, 1.)] # actuator[5] follows action[2] with multiplier 0.5.. etc
         assert action.shape == (self.n_actions,)
 
 
@@ -256,7 +269,7 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
                                     + self.np_random.normal(size=3, scale=0.001))
 
             # simulate user grasp on digits
-            self.sim.data.ctrl[8:11] = min(0.2 + self.t/10., 0.85)
+            self.sim.data.ctrl[8:11] = min(0.2 + self.t/10., 0.4) + action[3] / 2
 
             if (self.t > 2):
                 for j, idx in enumerate(ctrl_idx):
@@ -293,41 +306,41 @@ class MPLThumbGraspEnv(mpl_env.MPLEnv):
 
     def _get_obs(self):
         palm = [self.sim.data.sensordata[-19], self.sim.data.sensordata[-18]]
-        fingers = np.take(self.sim.data.sensordata, [-14, -10, -7, -4])
+        fingers = np.take(self.sim.data.sensordata, [-1, -4, -7, -10, -13])
         robot_qpos, robot_qvel = robot_get_obs(self.sim)
         robot_qpos = np.delete(robot_qpos, [0,1]) # ignore fixed joints: Wrist UDEV+PRO
         robot_qvel = np.delete(robot_qvel, [0,1])
-        object_qvel = self.sim.data.get_joint_qvel(self.target_body)
-        object_pos = self._get_achieved_qpos().ravel()[:3]  # this contains the object position + rotation
-        mocap_pos = self.sim.data.mocap_pos.ravel()
-        delta = object_pos - mocap_pos
+        #object_qvel = self.sim.data.get_joint_qvel(self.target_body)
+        #object_pos = self._get_achieved_qpos().ravel()[:3]  # this contains the object position + rotation
+        #mocap_pos = self.sim.data.mocap_pos.ravel()
+        #delta = object_pos - mocap_pos
 
-        observation = np.concatenate([palm, fingers, robot_qpos, robot_qvel, np.zeros(delta.size), np.zeros(object_qvel.size)])
-        #observation += self.np_random.normal(size=observation.size, scale=0.005)
-
+        observation = np.concatenate([palm, fingers, robot_qpos, robot_qvel])#, np.zeros(delta.size), np.zeros(object_qvel.size)])
+        observation += self.np_random.normal(size=observation.size, scale=0.005)
 
         return {
             'observation': observation.copy()
         }
 
     def _step_callback(self):
-
         self.t += 1
         return
 
     def step(self, action):
+        self.sim.data.xfrc_applied[:] = 0
+        if (self.t > 25 and random.uniform(0, 1) > 0.95):
+            perturb = np.array([np.random.normal(0,0.3,1)[0],np.random.normal(0,0.3,1)[0],np.random.normal(-1,0.25,1)[0],0,0,0])
+            self.sim.data.xfrc_applied[26+self.cur_target,:] = perturb
         self._set_action(action)
         self.sim.step()
         self._step_callback()
         obs = self._get_obs()
-
         done = self._is_done()
         info = {
             'episode_done': self._is_done()}
-        reward = self.compute_reward(action)
+        reward = self.compute_reward(action, obs['observation'])
 
         return obs, reward, done, info
-
 
 
 class MPLThumbGraspTrainEnv(MPLThumbGraspEnv, utils.EzPickle):
