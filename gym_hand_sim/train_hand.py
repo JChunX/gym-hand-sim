@@ -15,15 +15,14 @@
 
 r"""Train and Eval PPO.
 
-To run:
+Open tensorboard:
+$ tensorboard --logdir '<logdir>/ppo/gym/<train-session-name>/' --port 2223  
 
-```bash
-tensorboard --logdir $HOME/tmp/ppo/gym/HalfCheetah-v2/ --port 2223 &
+To eval agent with teleop:
+$ python .\train_hand.py --root_dir='.\logs\ppo\gym\MplGrasp-perturb' --num_parallel_environments=20 --teleop=True
 
-python tf_agents/agents/ppo/examples/v2/train_eval_clip_agent.py \
-  --root_dir=$HOME/tmp/ppo/gym/HalfCheetah-v2/ \
-  --logtostderr
-```
+To train agent:
+$ python .\train_hand.py --root_dir='.\logs\ppo\gym\<train-session-name>' --logtostderr --num_environment_steps=2000000 --num_parallel_environments=20 
 """
 
 from __future__ import absolute_import
@@ -39,19 +38,17 @@ from absl import flags
 from absl import logging
 
 from mjremote import mjremote
-from gym_hand_sim.envs import mpl_thumb_grasp_env
 import suite_mujoco
-import gym
+import gym_hand_sim
 import numpy as np
 
 import gin
-import tensorflow as tf  # pylint: disable=g-explicit-tensorflow-version-import
+import tensorflow as tf
 
 from tf_agents.agents.ppo import ppo_clip_agent
 from tf_agents.drivers import dynamic_episode_driver
 from tf_agents.environments import parallel_py_environment
 from tf_agents.environments import tf_py_environment
-from tf_agents.environments import wrappers
 from tf_agents.eval import metric_utils
 from tf_agents.metrics import tf_metrics
 from tf_agents.networks import actor_distribution_network
@@ -63,9 +60,9 @@ from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.system import system_multiprocessing as multiprocessing
 from tf_agents.utils import common
 
-
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-'''
+
+"""
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
@@ -79,15 +76,13 @@ if gpus:
         print(e)
 
 assert tf.test.is_gpu_available()
-assert tf.test.is_built_with_cuda()'''
-
-#tensorboard --logdir 'C:/users/xieji/repos/tmp/ppo/gym/MplThumbGraspBall-random/' --port 2223  
-# python train_hand.py \ --root_dir='C:/users/xieji/repos/tmp/ppo/gym/MplThumbGraspBall-random/' \ --logtostderr \ --num_environment_steps=20 \ --num_parallel_environments=13
+assert tf.test.is_built_with_cuda()
+"""
 
 flags.DEFINE_string('root_dir', os.getenv('TEST_UNDECLARED_OUTPUTS_DIR'),
                     'Root directory for writing logs/summaries/checkpoints.')
-flags.DEFINE_string('train_env_name', 'gym_hand_sim:MplThumbGraspTrain-v0', 'Name of an environment')
-flags.DEFINE_string('operate_env_name', 'gym_hand_sim:MplThumbGraspOp-v0', 'Name of an environment')
+flags.DEFINE_string('train_env_name', 'gym_hand_sim:MplGraspTrain-v0', 'Name of an environment')
+flags.DEFINE_string('operate_env_name', 'gym_hand_sim:MplGraspOp-v0', 'Name of an environment')
 flags.DEFINE_integer('replay_buffer_capacity', 1001,
                      'Replay buffer capacity per env.')
 flags.DEFINE_integer('num_parallel_environments', 20,
@@ -105,17 +100,18 @@ flags.DEFINE_integer('num_eval_episodes', 30,
                      'The number of episodes to run eval on.')
 flags.DEFINE_boolean('use_rnns', True,
                      'If true, use RNN for policy and value function.')
+flags.DEFINE_boolean('teleop', False,
+                     'If true, skip training and eval RL agent via VR teleoperation')
 FLAGS = flags.FLAGS
 
 
 @gin.configurable
 def train_eval(
     root_dir,
-    env_name='gym_hand_sim:MplThumbGraspTrain-v0',
-    op_env_name='gym_hand_sim:MplThumbGraspOp-v0',
+    env_name='gym_hand_sim:MplGraspTrain-v0',
+    op_env_name='gym_hand_sim:MplGraspOp-v0',
     env_load_fn=suite_mujoco.load,
     random_seed=None,
-    # TODO(b/127576522): rename to policy_fc_layers.
     actor_fc_layers=(512,256),
     value_fc_layers=(512,256),
     use_rnns=True,
@@ -138,10 +134,15 @@ def train_eval(
     summaries_flush_secs=1,
     use_tf_functions=True,
     debug_summaries=True,
-    summarize_grads_and_vars=False):
+    summarize_grads_and_vars=False,
+    teleop=False):
+
   """A simple train and eval for PPO."""
   if root_dir is None:
     raise AttributeError('train_eval requires a root_dir.')
+
+  if teleop:
+    num_environment_steps=1
 
   root_dir = os.path.expanduser(root_dir)
   train_dir = os.path.join(root_dir, 'train')
@@ -172,9 +173,6 @@ def train_eval(
     tf_env = tf_py_environment.TFPyEnvironment(
         parallel_py_environment.ParallelPyEnvironment(
             [lambda: env_load_fn(env_name)] * num_parallel_environments))
-
-    #tf_env = wrappers.ActionDiscretizeWrapper(tf_env, num_actions=11)
-    #eval_tf_env = wrappers.ActionDiscretizeWrapper(eval_tf_env, num_actions=11)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate, epsilon = 1e-5)
 
@@ -336,54 +334,56 @@ def train_eval(
         summary_prefix='Metrics',
     )
 
-    print("done")
-    time.sleep(10)
-    print("starting teleop")
+    if not teleop:
+      for _ in range(num_eval_episodes):
+        time_step = eval_tf_env.reset()
+        policy_state = eval_policy.get_initial_state(eval_tf_env.batch_size)
+        while True:
+          action_step = eval_policy.action(time_step, policy_state)
+          time_step = eval_tf_env.step(action_step.action)
+          eval_py_env.render()
+    else:
+      print('Starting teleop')
+      time.sleep(5)
+      # Let human operate along with agent
+      remote = mjremote()
+      remote.connect()
 
-    
-    for _ in range(num_eval_episodes):
-      time_step = eval_tf_env.reset()
-      policy_state = eval_policy.get_initial_state(eval_tf_env.batch_size)
-      while True:
-        action_step = eval_policy.action(time_step, policy_state)
-        time_step = eval_tf_env.step(action_step.action)
-        eval_py_env.render()
+      for _ in range(num_eval_episodes):
+        time_step = op_tf_env.reset()
+        policy_state = eval_policy.get_initial_state(op_tf_env.batch_size)
+        remote.movecamera(op_py_env.init_object_pos)
 
-'''
-    # Let human operate along with agent
-    remote = mjremote()
-    result = remote.connect()
+        while not time_step.is_last():
+          action_step = eval_policy.action(time_step, policy_state)
+          time_step = op_tf_env.step(action_step.action)
+          # mocap
+          is_controller = remote.getOVRControlType()
+          grip, pos, quat = remote.getOVRControllerInput()
+          hand_pose = remote.getOVRHandInput()
 
-    for _ in range(num_eval_episodes):
-      time_step = op_tf_env.reset()
-      policy_state = eval_policy.get_initial_state(op_tf_env.batch_size)
-      remote.movecamera(op_py_env.init_object_pos)
+          op_py_env.sim.data.mocap_pos[:] = pos
+          op_py_env.sim.data.mocap_quat[:] = quat
+          remote.setmocap(pos, quat)
 
-      while not time_step.is_last():
-        action_step = eval_policy.action(time_step, policy_state)
-        time_step = op_tf_env.step(action_step.action)
-        # mocap
-        is_controller = remote.getOVRControlType()
-        grip, pos, quat = remote.getOVRControllerInput()
-        hand_pose = remote.getOVRHandInput()
+          # actuation
+          if is_controller == 0:
+            for j, pose in enumerate(hand_pose):
+              op_py_env.sim.data.ctrl[3 + j] = pose
+          else:
+            if grip < 0.2:
+                op_py_env.sim.data.ctrl[3] = 1.2
+                op_py_env.sim.data.ctrl[4] = 0.3 + grip / 2.5
+                op_py_env.sim.data.ctrl[5] = 0.4 + grip / 3.0
+                op_py_env.sim.data.ctrl[12] = grip
+            op_py_env.sim.data.ctrl[8:11] = grip
 
-        op_py_env.sim.data.mocap_pos[:] = pos
-        op_py_env.sim.data.mocap_quat[:] = quat
-        remote.setmocap(pos, quat)
-
-        # actuation
-        if is_controller == 0:
-          for j, pose in enumerate(hand_pose):
-            op_py_env.sim.data.ctrl[3 + j] = pose
-        else:
-          op_py_env.sim.data.ctrl[8:11] = grip
-
-        # render
-        qpos = op_py_env.sim.data.qpos
-        remote.setqpos(qpos)
-        with open('actions.npy', 'wb') as f:
-          np.save(f, qpos)
-          np.save(f, op_py_env.sim.data.ctrl)'''
+          # render
+          qpos = op_py_env.sim.data.qpos
+          remote.setqpos(qpos)
+          with open('actions.npy', 'wb') as f:
+            np.save(f, qpos)
+            np.save(f, op_py_env.sim.data.ctrl)
 
 def main(_):
   logging.set_verbosity(logging.INFO)
@@ -398,7 +398,8 @@ def main(_):
       num_parallel_environments=FLAGS.num_parallel_environments,
       replay_buffer_capacity=FLAGS.replay_buffer_capacity,
       num_epochs=FLAGS.num_epochs,
-      num_eval_episodes=FLAGS.num_eval_episodes)
+      num_eval_episodes=FLAGS.num_eval_episodes,
+      teleop=FLAGS.teleop)
 
 if __name__ == '__main__':
   flags.mark_flag_as_required('root_dir')

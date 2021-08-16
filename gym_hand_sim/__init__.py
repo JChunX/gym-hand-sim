@@ -2,18 +2,18 @@ from gym.envs.registration import register
 
 
 register(
-    id='MplThumbGraspTrain-v0',
-    entry_point='gym_hand_sim.envs:MPLThumbGraspTrainEnv',
+    id='MplGraspTrain-v0',
+    entry_point='gym_hand_sim.envs:MPLGraspTrainEnv',
     max_episode_steps=100,
 )
 
 register(
-    id='MplThumbGraspOp-v0',
-    entry_point='gym_hand_sim.envs:MPLThumbGraspOpEnv',
+    id='MplGraspOp-v0',
+    entry_point='gym_hand_sim.envs:MPLGraspOpEnv',
     max_episode_steps=100,
 )
 register(
-    id='MplThumbGraspTrack-v0',
-    entry_point='gym_hand_sim.envs:MPLThumbGraspTrackEnv',
+    id='MplGraspTrack-v0',
+    entry_point='gym_hand_sim.envs:MPLGraspTrackEnv',
     max_episode_steps=100,
 )
